@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>map.html</file>
+        <file>../lambo.png</file>
+        <file>../transport.png</file>
+        <file>../car.png</file>
+    </qresource>
+</RCC>

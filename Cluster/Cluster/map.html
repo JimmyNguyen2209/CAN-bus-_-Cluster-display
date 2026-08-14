@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lamborghini Pro Navigation</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+    <style>
+        body { padding: 0; margin: 0; background-color: #03040A; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+        #map { height: 100vh; width: 100vw; cursor: crosshair; }
+
+        /* Bộ lọc Dark Mode cực ngầu cho bản đồ */
+        .leaflet-layer, .leaflet-control-zoom-in, .leaflet-control-zoom-out, .leaflet-control-attribution {
+            filter: invert(100%) hue-rotate(180deg) brightness(85%) contrast(110%);
+        }
+
+        /* ── BẢNG ĐIỀU KHIỂN NỔI (GLASSMORPHISM UI) ── */
+        #nav-dashboard {
+            position: absolute; top: 15px; left: 15px; z-index: 1000;
+            background: rgba(10, 14, 22, 0.85); /* Đen mờ */
+            backdrop-filter: blur(8px);
+            border-left: 4px solid #1DB954; /* Viền xanh chủ đạo */
+            color: #C8C4BC; padding: 12px 18px; border-radius: 4px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.6); pointer-events: none;
+            min-width: 280px; transition: all 0.3s ease;
+        }
+
+        #nav-title { font-size: 9px; letter-spacing: 2px; color: #5A6878; font-weight: bold; margin-bottom: 4px; }
+        #nav-status { font-size: 14px; font-weight: bold; color: #1DB954; }
+        #nav-distance { font-size: 11px; margin-top: 6px; color: #8A98A8; display: none; }
+
+        /* ── NÚT HỦY LỘ TRÌNH MỚI ── */
+        #nav-reset {
+            margin-top: 12px; width: 100%; padding: 8px;
+            background: #C02020; color: #FFF; border: none; border-radius: 4px;
+            font-size: 11px; font-weight: bold; letter-spacing: 1px;
+            cursor: pointer; display: none; /* Ẩn đi lúc đầu */
+            pointer-events: auto; /* Cho phép click xuyên qua lớp bảng điều khiển */
+            transition: background 0.2s;
+        }
+        #nav-reset:hover { background: #E03030; }
+
+        /* Custom lại thanh tìm kiếm cho hợp tông màu xe */
+        .leaflet-control-geocoder { box-shadow: 0 4px 15px rgba(0,0,0,0.6) !important; border-radius: 4px !important; }
+    </style>
+</head>
+<body>
+    <div id="nav-dashboard">
+        <div id="nav-title">LAMBORGHINI NAVIGATION</div>
+        <div id="nav-status">CHỌN ĐIỂM XUẤT PHÁT (A)</div>
+        <div id="nav-distance">-- km</div>
+        <button id="nav-reset">✖ HỦY LỘ TRÌNH</button>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // 1. KHỞI TẠO BẢN ĐỒ
+        var map = L.map('map', { zoomControl: false }).setView([10.8504, 106.7716], 14);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+        var carIcon = L.icon({ iconUrl: 'car.png', iconSize: [42, 42], iconAnchor: [21, 21], className: 'car-avatar'});
+        var startIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+        var endIcon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+
+        var carMarker = null, markerA = null, markerB = null, routeLine = null;
+        var startPoint = null, endPoint = null;
+        var routeCoords = [];
+        var currentLeg = 0, currentSpeed = 0, isJourneyStarted = false;
+
+        var statusUI = document.getElementById('nav-status');
+        var dashUI = document.getElementById('nav-dashboard');
+        var distUI = document.getElementById('nav-distance');
+        var resetBtn = document.getElementById('nav-reset'); // Bắt ID của nút
+
+        // =========================================================
+        // SỰ KIỆN KHI BẤM NÚT "HỦY LỘ TRÌNH"
+        // =========================================================
+        resetBtn.addEventListener('click', function(e) {
+            e.stopPropagation(); // Cực kỳ quan trọng: Ngăn không cho tiếng click lọt xuống bản đồ
+
+            // Xóa sạch dữ liệu
+            startPoint = null; endPoint = null; isJourneyStarted = false; currentLeg = 0; currentSpeed = 0;
+            if(markerA) map.removeLayer(markerA);
+            if(markerB) map.removeLayer(markerB);
+            if(routeLine) map.removeLayer(routeLine);
+            if(carMarker) map.removeLayer(carMarker);
+
+            // Khôi phục giao diện về mặc định
+            distUI.style.display = "none";
+            resetBtn.style.display = "none"; // Ẩn nút đi
+
+            dashUI.style.borderLeftColor = "#1DB954";
+            statusUI.style.color = "#1DB954";
+            statusUI.innerHTML = "CHỌN ĐIỂM XUẤT PHÁT (A)";
+        });
+
+        // =========================================================
+        // HỆ THỐNG THANH TÌM KIẾM (GEOCODER) NẰM GÓC PHẢI
+        // =========================================================
+        var geocoder = L.Control.geocoder({
+            defaultMarkGeocode: false,
+            placeholder: "Tìm kiếm địa điểm..."
+        }).on('markgeocode', function(e) {
+            handleLocationSelect(e.geocode.center);
+        }).addTo(map);
+
+        document.querySelector('.leaflet-control-geocoder').parentElement.style.marginTop = "15px";
+        document.querySelector('.leaflet-control-geocoder').parentElement.style.marginRight = "15px";
+
+        // =========================================================
+        // HÀM XỬ LÝ CHUNG: KHI NGƯỜI DÙNG CHẠM HOẶC TÌM KIẾM
+        // =========================================================
+        function handleLocationSelect(latlng) {
+            if (!startPoint) {
+                startPoint = latlng;
+                markerA = L.marker(startPoint, {icon: startIcon}).addTo(map);
+                map.panTo(startPoint);
+
+                dashUI.style.borderLeftColor = "#C02020";
+                statusUI.style.color = "#C02020";
+                statusUI.innerHTML = "CHỌN ĐIỂM ĐẾN (B)";
+            }
+            else if (!endPoint) {
+                endPoint = latlng;
+                markerB = L.marker(endPoint, {icon: endIcon}).addTo(map);
+
+                dashUI.style.borderLeftColor = "#9A7A2A";
+                statusUI.style.color = "#9A7A2A";
+                statusUI.innerHTML = "ĐANG LẬP LỘ TRÌNH...";
+
+                setRoute(startPoint.lat, startPoint.lng, endPoint.lat, endPoint.lng);
+
+                // HIỆN NÚT RESET LÊN SAU KHI CHỌN XONG 2 ĐIỂM
+                resetBtn.style.display = "block";
+            }
+            else {
+                // Nếu người dùng lỡ tay chạm vào bản đồ lần 3 thay vì bấm nút Hủy
+                // thì ta vẫn reset lại cho họ, đồng thời giấu nút đi
+                startPoint = null; endPoint = null; isJourneyStarted = false; currentLeg = 0; currentSpeed = 0;
+                if(markerA) map.removeLayer(markerA);
+                if(markerB) map.removeLayer(markerB);
+                if(routeLine) map.removeLayer(routeLine);
+                if(carMarker) map.removeLayer(carMarker);
+                distUI.style.display = "none";
+                resetBtn.style.display = "none"; // Ẩn nút đi
+
+                // Đặt ngay điểm A mới
+                startPoint = latlng;
+                markerA = L.marker(startPoint, {icon: startIcon}).addTo(map);
+
+                dashUI.style.borderLeftColor = "#C02020";
+                statusUI.style.color = "#C02020";
+                statusUI.innerHTML = "CHỌN ĐIỂM ĐẾN (B)";
+            }
+        }
+
+        map.on('click', function(e) { handleLocationSelect(e.latlng); });
+
+        // =========================================================
+        // HỆ THỐNG TÍNH TOÁN ĐƯỜNG ĐI OSRM
+        // =========================================================
+        function setRoute(startLat, startLng, endLat, endLng) {
+            var osrmUrl = `https://router.project-osrm.org/route/v1/driving/${startLng},${startLat};${endLng},${endLat}?overview=full&geometries=geojson`;
+
+            fetch(osrmUrl)
+            .then(res => res.json())
+            .then(data => {
+                var coords = data.routes[0].geometry.coordinates;
+                var totalDistance = (data.routes[0].distance / 1000).toFixed(1);
+
+                routeCoords = coords.map(c => ({lat: c[1], lng: c[0]}));
+                var latlngs = routeCoords.map(c => [c.lat, c.lng]);
+
+                routeLine = L.polyline(latlngs, {color: '#1DB954', weight: 6, opacity: 0.8}).addTo(map);
+
+                if(carMarker) map.removeLayer(carMarker);
+                carMarker = L.marker([routeCoords[0].lat, routeCoords[0].lng], {icon: carIcon}).addTo(map);
+
+                map.fitBounds(routeLine.getBounds(), {padding: [50, 50]});
+
+                dashUI.style.borderLeftColor = "#1DB954";
+                statusUI.style.color = "#1DB954";
+                statusUI.innerHTML = "SẴN SÀNG DI CHUYỂN";
+
+                distUI.style.display = "block";
+                distUI.innerHTML = "KHOẢNG CÁCH: " + totalDistance + " KM";
+
+                currentLeg = 0;
+                isJourneyStarted = true;
+            })
+            .catch(err => {
+                statusUI.innerHTML = "LỖI TÌM ĐƯỜNG!";
+                console.log(err);
+            });
+        }
+
+        // =========================================================
+        // NHẬN TỐC ĐỘ ESP32 VÀ DI CHUYỂN XE
+        // =========================================================
+        function updateCarSpeed(speed) { currentSpeed = speed; }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            var R = 6371e3; var dLat = (lat2-lat1) * Math.PI/180; var dLon = (lon2-lon1) * Math.PI/180;
+            var a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI/180) * Math.cos(lat2 * Math.PI/180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+            var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); return R * c;
+        }
+
+        setInterval(function() {
+            if (!isJourneyStarted || currentSpeed <= 0 || currentLeg >= routeCoords.length - 1) return;
+            let speedMs = currentSpeed * (1000.0 / 3600.0);
+            let distanceToMove = speedMs * 0.05;
+            let p1 = routeCoords[currentLeg]; let p2 = routeCoords[currentLeg + 1];
+            let distToNext = calculateDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+
+            if (distanceToMove >= distToNext) {
+                currentLeg++;
+                carMarker.setLatLng([p2.lat, p2.lng]);
+            } else {
+                let fraction = distanceToMove / distToNext;
+                let newLat = p1.lat + (p2.lat - p1.lat) * fraction; let newLng = p1.lng + (p2.lng - p1.lng) * fraction;
+                carMarker.setLatLng([newLat, newLng]);
+                map.panTo([newLat, newLng], {animate: true, duration: 0.1});
+                routeCoords[currentLeg] = {lat: newLat, lng: newLng};
+            }
+        }, 50);
+    </script>
+</body>
+</html>

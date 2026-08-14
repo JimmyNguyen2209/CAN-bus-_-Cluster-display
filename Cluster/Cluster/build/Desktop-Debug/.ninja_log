@@ -1,0 +1,16 @@
+# ninja log v6
+41	49	1780630514501733704	clean	a31eedcededa8236
+8	127	1783506427394575314	Cluster_autogen/mocs_compilation.cpp	1f76ed00a1593bd3
+8	127	1783506427394575314	/home/jimmy/DOAN2/Cluster/build/Desktop-Debug/Cluster_autogen/mocs_compilation.cpp	1f76ed00a1593bd3
+701	8655	1783435780925055968	CMakeFiles/Cluster.dir/Cluster_autogen/mocs_compilation.cpp.o	43fe13bd61cdc23a
+84	397	1783508953163595437	CMakeFiles/Cluster.dir/Cluster_autogen/EWIEGA46WW/qrc_qml.cpp.o	dccf86c95e7b030e
+398	1925	1783508953479592730	Cluster	50cfe2d7418142b0
+701	16833	1783435780925055968	CMakeFiles/Cluster.dir/main.cpp.o	6630b90bbfca0db3
+170	7975	1783356386779219185	CMakeFiles/Cluster.dir/route_simulator.cpp.o	997e0694ab98d441
+2186	12006	1780721606507302778	CMakeFiles/Cluster.dir/spotifyworker.cpp.o	3b5f9eedccab4ccf
+1230	8263	1783427389536167573	CMakeFiles/Cluster.dir/canworker.cpp.o	143057dd4e954118
+4	41	1780630514465733929	CMakeFiles/clean.additional	ef993b15a92b8f11
+10	83	1783508953151595540	Cluster_autogen/EWIEGA46WW/qrc_qml.cpp	bffc52b12f40bffa
+8	127	1783506427394575314	/home/jimmy/DOAN2/Cluster/build/Desktop-Debug/Cluster_autogen/timestamp	1f76ed00a1593bd3
+8	127	1783506427394575314	Cluster_autogen/timestamp	1f76ed00a1593bd3
+10	83	1783508953151595540	/home/jimmy/DOAN2/Cluster/build/Desktop-Debug/Cluster_autogen/EWIEGA46WW/qrc_qml.cpp	bffc52b12f40bffa
